@@ -33,24 +33,70 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bookify.ui.theme.BookifyTheme
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
 
 class SignupActivity : ComponentActivity() {
+
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+    private val db: FirebaseFirestore by lazy { FirebaseFirestore.getInstance() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             BookifyTheme {
-                SignUpScreen()
+                SignUpScreen(
+                    onCreateAccount = { fullName, email, password ->
+                        createAccount(fullName, email, password)
+                    },
+                    onGoToSignIn = {
+                        startActivity(Intent(this, SigninActivity::class.java))
+                        finish()
+                    }
+                )
             }
         }
+    }
+
+    private fun createAccount(fullName: String, email: String, password: String) {
+        auth.createUserWithEmailAndPassword(email.trim(), password)
+            .addOnSuccessListener { result ->
+                val uid = result.user?.uid ?: return@addOnSuccessListener
+
+                // Save user profile in Firestore
+                val userDoc = hashMapOf(
+                    "fullName" to fullName.trim(),
+                    "email" to email.trim(),
+                    "createdAt" to FieldValue.serverTimestamp()
+                )
+
+                db.collection("users").document(uid)
+                    .set(userDoc)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Account created!", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this, HomeActivity::class.java))
+                        finish()
+                    }
+                    .addOnFailureListener { e ->
+                        Toast.makeText(this, e.message ?: "Failed to save user", Toast.LENGTH_LONG).show()
+                    }
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, e.message ?: "Signup failed", Toast.LENGTH_LONG).show()
+            }
     }
 }
 
 @Composable
-fun SignUpScreen() {
+fun SignUpScreen(
+    onCreateAccount: (String, String, String) -> Unit,
+    onGoToSignIn: () -> Unit
+) {
     val context = LocalContext.current
 
-    // Form state
     var fullName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -58,6 +104,7 @@ fun SignUpScreen() {
     var showPass by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
 
     fun isEmailValid(e: String) =
         android.util.Patterns.EMAIL_ADDRESS.matcher(e).matches()
@@ -79,9 +126,9 @@ fun SignUpScreen() {
             .background(
                 brush = Brush.verticalGradient(
                     listOf(
-                        Color(0xFF005C97), // deep blue
-                        Color(0xFF363795), // indigo/blue
-                        Color(0xFF5EB1FF)  // soft sky blue
+                        Color(0xFF005C97),
+                        Color(0xFF363795),
+                        Color(0xFF5EB1FF)
                     )
                 )
             )
@@ -95,7 +142,6 @@ fun SignUpScreen() {
         ) {
             Spacer(Modifier.height(48.dp))
 
-            // App title
             Text(
                 text = "Bookify",
                 fontSize = 40.sp,
@@ -130,9 +176,7 @@ fun SignUpScreen() {
                         onValueChange = { fullName = it },
                         label = { Text("Full name") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = ImeAction.Next
-                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -189,15 +233,18 @@ fun SignUpScreen() {
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = {
-                                if (validate()) {
-                                    Toast.makeText(context, "Account created!", Toast.LENGTH_SHORT).show()
+                                if (validate() && !loading) {
+                                    loading = true
+                                    onCreateAccount(fullName, email, password)
+                                    loading = false // UI-only; real loading ends in activity callbacks
+                                } else {
+                                    Toast.makeText(context, "Fix the errors", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Error text
                     if (errorText != null) {
                         Text(
                             text = errorText!!,
@@ -210,24 +257,31 @@ fun SignUpScreen() {
 
                     Button(
                         onClick = {
-                            if (validate()) {
-                                Toast.makeText(context, "Account created!", Toast.LENGTH_SHORT).show()
+                            if (validate() && !loading) {
+                                loading = true
+                                onCreateAccount(fullName, email, password)
+                                loading = false // UI-only; real loading ends in activity callbacks
+                            } else {
+                                Toast.makeText(context, "Fix the errors", Toast.LENGTH_SHORT).show()
                             }
                         },
+                        enabled = !loading,
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp)
                     ) {
-                        Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        if (loading) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text("Creating...")
+                        } else {
+                            Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
 
                     TextButton(
-                        onClick = {
-                            // Navigate back to Sign in
-                            val intent = Intent(context, SigninActivity::class.java)
-                            context.startActivity(intent)
-                        },
+                        onClick = onGoToSignIn,
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text("Already have an account? Sign in")
@@ -244,6 +298,6 @@ fun SignUpScreen() {
 @Composable
 fun SignUpPreview() {
     BookifyTheme {
-        SignUpScreen()
+        SignUpScreen(onCreateAccount = { _, _, _ -> }, onGoToSignIn = {})
     }
 }

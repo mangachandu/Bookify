@@ -32,6 +32,18 @@
             android:exported="true"
             android:label="Bookify Sign In"
             android:theme="@style/Theme.Bookify" />
+        <activity
+            android:name=".HomeActivity"
+            android:exported="true"
+            android:label="Bookify Sign In"
+            android:theme="@style/Theme.Bookify" />
+
+        <activity
+            android:name=".ProfessionalProfileActivity"
+            android:exported="true"
+            android:label="Bookify Sign In"
+            android:theme="@style/Theme.Bookify" />
+
     </application>
 
 

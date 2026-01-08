@@ -1,5 +1,6 @@
 package com.example.bookify
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
@@ -33,27 +34,68 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bookify.ui.theme.BookifyTheme
+import com.google.firebase.auth.FirebaseAuth
+
+private const val GDPR_PREFS = "gdpr_prefs"
+private const val GDPR_ACCEPTED = "gdpr_accepted"
 
 class SigninActivity : ComponentActivity() {
+
+    private val auth: FirebaseAuth by lazy { FirebaseAuth.getInstance() }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // If already logged in → go Home directly
+        if (auth.currentUser != null) {
+            startActivity(Intent(this, HomeActivity::class.java))
+            finish()
+            return
+        }
+
         setContent {
             BookifyTheme {
                 SignInScreen(
-                    onSignIn = { email, _ ->
-                        // TODO: replace with real auth
-                        Toast.makeText(this, "Welcome $email!", Toast.LENGTH_SHORT).show()
+                    onSignIn = { email, password ->
+                        signInUser(email, password)
                     },
                     onCreateAccountClick = {
                         startActivity(Intent(this, SignupActivity::class.java))
                     },
-                    onForgotPassword = {
-                        Toast.makeText(this, "Forgot password tapped", Toast.LENGTH_SHORT).show()
+                    onForgotPassword = { email ->
+                        resetPassword(email)
                     }
                 )
             }
         }
+    }
+
+    private fun signInUser(email: String, password: String) {
+        auth.signInWithEmailAndPassword(email.trim(), password)
+            .addOnSuccessListener {
+                Toast.makeText(this, "Login successful!", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, HomeActivity::class.java))
+                finish()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, e.message ?: "Login failed", Toast.LENGTH_LONG).show()
+            }
+    }
+
+    private fun resetPassword(email: String) {
+        if (email.trim().isEmpty()) {
+            Toast.makeText(this, "Enter your email first", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        auth.sendPasswordResetEmail(email.trim())
+            .addOnSuccessListener {
+                Toast.makeText(this, "Reset link sent to $email", Toast.LENGTH_LONG).show()
+            }
+            .addOnFailureListener { e ->
+                Toast.makeText(this, e.message ?: "Failed to send reset email", Toast.LENGTH_LONG).show()
+            }
     }
 }
 
@@ -61,9 +103,46 @@ class SigninActivity : ComponentActivity() {
 fun SignInScreen(
     onSignIn: (String, String) -> Unit,
     onCreateAccountClick: () -> Unit,
-    onForgotPassword: () -> Unit
+    onForgotPassword: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context as? ComponentActivity
+
+    // ✅ GDPR state (shows only if not accepted before)
+    val prefs = remember {
+        context.getSharedPreferences(GDPR_PREFS, Context.MODE_PRIVATE)
+    }
+    var showGdpr by remember { mutableStateOf(!prefs.getBoolean(GDPR_ACCEPTED, false)) }
+
+    if (showGdpr) {
+        AlertDialog(
+            onDismissRequest = { /* force user choice */ },
+            title = { Text("GDPR Consent") },
+            text = {
+                Text(
+                    "Bookify collects and stores your login email and booking activity to provide " +
+                            "appointment features. We use Firebase for authentication and database storage.\n\n" +
+                            "By tapping Accept, you agree to this data processing for app functionality."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    prefs.edit().putBoolean(GDPR_ACCEPTED, true).apply()
+                    showGdpr = false
+                }) {
+                    Text("Accept")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = {
+                    Toast.makeText(context, "You declined consent. Closing app.", Toast.LENGTH_LONG).show()
+                    activity?.finishAffinity()
+                }) {
+                    Text("Decline")
+                }
+            }
+        )
+    }
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -88,9 +167,9 @@ fun SignInScreen(
             .background(
                 brush = Brush.verticalGradient(
                     listOf(
-                        Color(0xFF005C97), // deep blue
-                        Color(0xFF363795), // indigo/blue
-                        Color(0xFF5EB1FF)  // soft sky blue
+                        Color(0xFF005C97),
+                        Color(0xFF363795),
+                        Color(0xFF5EB1FF)
                     )
                 )
             )
@@ -104,7 +183,6 @@ fun SignInScreen(
         ) {
             Spacer(Modifier.height(56.dp))
 
-            // App title
             Text(
                 text = "Bookify",
                 fontSize = 40.sp,
@@ -165,6 +243,12 @@ fun SignInScreen(
                         ),
                         keyboardActions = KeyboardActions(
                             onDone = {
+                                if (!prefs.getBoolean(GDPR_ACCEPTED, false)) {
+                                    Toast.makeText(context, "Please accept GDPR consent first.", Toast.LENGTH_SHORT).show()
+                                    showGdpr = true
+                                    return@KeyboardActions
+                                }
+
                                 if (validate()) onSignIn(email, password)
                                 else Toast.makeText(context, "Fix the errors", Toast.LENGTH_SHORT).show()
                             }
@@ -172,7 +256,6 @@ fun SignInScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Error text
                     if (errorText != null) {
                         Text(
                             text = errorText!!,
@@ -185,6 +268,12 @@ fun SignInScreen(
 
                     Button(
                         onClick = {
+                            if (!prefs.getBoolean(GDPR_ACCEPTED, false)) {
+                                Toast.makeText(context, "Please accept GDPR consent first.", Toast.LENGTH_SHORT).show()
+                                showGdpr = true
+                                return@Button
+                            }
+
                             if (validate()) onSignIn(email, password)
                             else Toast.makeText(context, "Fix the errors", Toast.LENGTH_SHORT).show()
                         },
@@ -197,7 +286,7 @@ fun SignInScreen(
                     }
 
                     TextButton(
-                        onClick = onForgotPassword,
+                        onClick = { onForgotPassword(email) },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
                         Text("Forgot password?")
@@ -213,6 +302,7 @@ fun SignInScreen(
                     }
                 }
             }
+
             Spacer(Modifier.height(24.dp))
         }
     }
