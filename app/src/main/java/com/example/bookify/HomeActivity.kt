@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -103,6 +105,85 @@ fun HomeScreen(
     onAttachListener: (ListenerRegistration) -> Unit,
     showToast: (String) -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf("home") }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Bookify",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                actions = {
+                    IconButton(onClick = onLogout) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Logout"
+                        )
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = selectedTab == "home",
+                    onClick = { selectedTab = "home" },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = "Home"
+                        )
+                    },
+                    label = { Text("Home") }
+                )
+
+                NavigationBarItem(
+                    selected = selectedTab == "bookings",
+                    onClick = { selectedTab = "bookings" },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Bookmark,
+                            contentDescription = "My Bookings"
+                        )
+                    },
+                    label = { Text("My Bookings") }
+                )
+            }
+        }
+    ) { paddingValues ->
+        when (selectedTab) {
+            "home" -> {
+                HomeContent(
+                    db = db,
+                    userName = userName,
+                    onOpenProfile = onOpenProfile,
+                    onAttachListener = onAttachListener,
+                    showToast = showToast,
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+
+            "bookings" -> {
+                MyBookingsPage(
+                    modifier = Modifier.padding(paddingValues)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HomeContent(
+    db: FirebaseFirestore,
+    userName: String,
+    onOpenProfile: (Professional) -> Unit,
+    onAttachListener: (ListenerRegistration) -> Unit,
+    showToast: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
     var loading by remember { mutableStateOf(true) }
@@ -162,142 +243,169 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Bookify",
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(
-                            imageVector = Icons.Default.Logout,
-                            contentDescription = "Logout"
+    Column(
+        modifier = modifier
+            .padding(16.dp)
+            .fillMaxSize()
+    ) {
+        Text(
+            text = "Welcome, $userName",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Text(
+            text = "Find the right professional for your needs",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            leadingIcon = {
+                Icon(Icons.Default.Search, contentDescription = "Search")
+            },
+            placeholder = {
+                Text("Search professionals or services")
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            categories.take(3).forEach { cat ->
+                FilterChipItem(
+                    text = cat,
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            categories.drop(3).forEach { cat ->
+                FilterChipItem(
+                    text = cat,
+                    selected = selectedCategory == cat,
+                    onClick = { selectedCategory = cat }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = if (selectedCategory == "All") "All Professionals" else selectedCategory,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        when {
+            loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            error != null -> {
+                Text(
+                    text = "Error: ${error ?: "Something went wrong"}",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            filtered.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No results found.")
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filtered) { prof ->
+                        ProfessionalCard(
+                            professional = prof,
+                            onClick = { onOpenProfile(prof) }
                         )
                     }
                 }
-            )
+            }
         }
-    ) { paddingValues ->
+    }
+}
 
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .padding(16.dp)
-                .fillMaxSize()
+@Composable
+fun MyBookingsPage(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Text(
+            text = "My Bookings",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Here you will see your booked appointments.",
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Text(
-                text = "Welcome, $userName",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Find the right professional for your needs",
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                },
-                placeholder = {
-                    Text("Search professionals or services")
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier.padding(16.dp)
             ) {
-                categories.take(3).forEach { cat ->
-                    FilterChipItem(
-                        text = cat,
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat }
-                    )
-                }
-            }
+                Text(
+                    text = "No bookings yet",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                categories.drop(3).forEach { cat ->
-                    FilterChipItem(
-                        text = cat,
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat }
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = if (selectedCategory == "All") "All Professionals" else selectedCategory,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            when {
-                loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-
-                error != null -> {
-                    Text(
-                        text = "Error: ${error ?: "Something went wrong"}",
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                filtered.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("No results found.")
-                    }
-                }
-
-                else -> {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(filtered) { prof ->
-                            ProfessionalCard(
-                                professional = prof,
-                                onClick = { onOpenProfile(prof) }
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = "Your booked appointments will appear here."
+                )
             }
         }
     }
