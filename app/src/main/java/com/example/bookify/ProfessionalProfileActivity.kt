@@ -9,6 +9,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -39,10 +41,8 @@ class ProfessionalProfileActivity : ComponentActivity() {
                     location = location,
                     about = about,
                     onBookAppointment = {
-                        // ✅ Show booked message
                         Toast.makeText(this, "Appointment booked!", Toast.LENGTH_LONG).show()
 
-                        // ✅ Go to Home screen
                         val i = Intent(this, HomeActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         }
@@ -69,7 +69,21 @@ fun ProfileScreen(
     val context = LocalContext.current
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Profile") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Profile") },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        (context as? ComponentActivity)?.finish()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        }
     ) { pv ->
         Column(
             modifier = Modifier
@@ -77,16 +91,27 @@ fun ProfileScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(
+                text = name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+
             Spacer(Modifier.height(6.dp))
+
             Text("$category • $location")
+
             Spacer(Modifier.height(10.dp))
+
             Text("Rating: $rating")
             Text("Price: $price")
 
             Spacer(Modifier.height(16.dp))
+
             Text("About", fontWeight = FontWeight.SemiBold)
+
             Spacer(Modifier.height(6.dp))
+
             Text(if (about.isBlank()) "No description available." else about)
 
             Spacer(Modifier.height(24.dp))
