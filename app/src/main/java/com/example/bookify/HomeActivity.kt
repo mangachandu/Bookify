@@ -49,7 +49,6 @@ class HomeActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // protect screen
         if (auth.currentUser == null) {
             startActivity(Intent(this, SigninActivity::class.java))
             finish()
@@ -60,13 +59,14 @@ class HomeActivity : ComponentActivity() {
             BookifyTheme {
                 HomeScreen(
                     db = db,
+                    userName = auth.currentUser?.displayName ?: "User",
                     onLogout = {
                         auth.signOut()
                         startActivity(Intent(this, SigninActivity::class.java))
                         finish()
                     },
                     onOpenProfile = { prof ->
-                        val i = Intent(this, ProfessionalProfileActivity::class.java).apply {
+                        val intent = Intent(this, ProfessionalProfileActivity::class.java).apply {
                             putExtra("id", prof.id)
                             putExtra("name", prof.name)
                             putExtra("category", prof.category)
@@ -74,11 +74,14 @@ class HomeActivity : ComponentActivity() {
                             putExtra("price", prof.price)
                             putExtra("location", prof.location)
                             putExtra("about", prof.about)
+                            putExtra("imageUrl", prof.imageUrl)
                         }
-                        startActivity(i)
+                        startActivity(intent)
                     },
                     onAttachListener = { reg -> listener = reg },
-                    showToast = { msg -> Toast.makeText(this, msg, Toast.LENGTH_LONG).show() }
+                    showToast = { msg ->
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    }
                 )
             }
         }
@@ -94,6 +97,7 @@ class HomeActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(
     db: FirebaseFirestore,
+    userName: String,
     onLogout: () -> Unit,
     onOpenProfile: (Professional) -> Unit,
     onAttachListener: (ListenerRegistration) -> Unit,
@@ -105,11 +109,15 @@ fun HomeScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var professionals by remember { mutableStateOf(listOf<Professional>()) }
 
-    val categories = listOf("All", "Doctors", "Clinics", "Beauty & Salon", "Wellness", "Fitness")
+    val categories = listOf(
+        "All",
+        "Doctors",
+        "Clinics",
+        "Beauty & Salon",
+        "Wellness",
+        "Fitness"
+    )
 
-
-
-    // ✅ Real-time Firestore listener
     DisposableEffect(Unit) {
         val reg = db.collection("professionals")
             .addSnapshotListener { snap, e ->
@@ -140,16 +148,16 @@ fun HomeScreen(
         onDispose { reg.remove() }
     }
 
-    // ✅ UI filtering
     val filtered = remember(searchQuery, selectedCategory, professionals) {
         professionals.filter { p ->
-            val matchesCategory = (selectedCategory == "All") || (p.category == selectedCategory)
+            val matchesCategory = selectedCategory == "All" || p.category == selectedCategory
             val q = searchQuery.trim().lowercase()
             val matchesSearch =
                 q.isEmpty() ||
                         p.name.lowercase().contains(q) ||
                         p.category.lowercase().contains(q) ||
                         p.location.lowercase().contains(q)
+
             matchesCategory && matchesSearch
         }
     }
@@ -157,35 +165,62 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Bookify", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Bookify",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 actions = {
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.Logout, contentDescription = "Logout")
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Logout"
+                        )
                     }
                 }
             )
         }
     ) { paddingValues ->
+
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
-            // 🔍 Search
+            Text(
+                text = "Welcome, $userName",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "Find the right professional for your needs",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                placeholder = { Text("Search professionals or services") },
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = "Search")
+                },
+                placeholder = {
+                    Text("Search professionals or services")
+                },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // ✅ Category chips (same UI as your screenshot)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -198,7 +233,9 @@ fun HomeScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -212,7 +249,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = if (selectedCategory == "All") "All Professionals" else selectedCategory,
@@ -220,30 +257,44 @@ fun HomeScreen(
                 fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             when {
                 loading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
 
                 error != null -> {
                     Text(
-                        text = "Error: ${error!!}",
+                        text = "Error: ${error ?: "Something went wrong"}",
                         color = MaterialTheme.colorScheme.error
                     )
                 }
 
                 filtered.isEmpty() -> {
-                    Text("No results found.")
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No results found.")
+                    }
                 }
 
                 else -> {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
                         items(filtered) { prof ->
-                            ProfessionalCard(professional = prof, onClick = { onOpenProfile(prof) })
+                            ProfessionalCard(
+                                professional = prof,
+                                onClick = { onOpenProfile(prof) }
+                            )
                         }
                     }
                 }
@@ -253,36 +304,52 @@ fun HomeScreen(
 }
 
 @Composable
-fun FilterChipItem(text: String, selected: Boolean, onClick: () -> Unit) {
+fun FilterChipItem(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        label = {
+            Text(
+                text = text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     )
 }
 
 @Composable
-fun ProfessionalCard(professional: Professional, onClick: () -> Unit) {
+fun ProfessionalCard(
+    professional: Professional,
+    onClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(4.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(professional.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = professional.name,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text("${professional.category} • ${professional.location}")
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text("Rating: ${professional.rating}  •  ${professional.price}")
         }
     }
 }
-
-
-
